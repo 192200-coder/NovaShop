@@ -4,9 +4,9 @@ import Hero from './components/Hero.jsx';
 import Benefits from './components/Benefits.jsx';
 import Catalog from './components/Catalog.jsx';
 import CartDrawer from './components/CartDrawer.jsx';
-import AddProductModal from './components/AddProductModal.jsx';
+import ProductFormModal from './components/ProductFormModal.jsx';
 import Footer from './components/Footer.jsx';
-import { getProducts, createProduct } from './api.js';
+import { getProducts, createProduct, updateProduct, deleteProduct } from './api.js';
 
 export default function App() {
   const [products, setProducts] = useState([]);
@@ -17,6 +17,7 @@ export default function App() {
   const [cart, setCart] = useState({});
   const [openCart, setOpenCart] = useState(false);
   const [openAddModal, setOpenAddModal] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +68,33 @@ export default function App() {
     setProducts(prev => [created, ...prev]);
   }
 
+  async function handleUpdateProduct(data) {
+    const updated = await updateProduct(editing._id, data);
+    setProducts(prev => prev.map(p => (p._id === updated._id ? updated : p)));
+    setCart(prev => {
+      if (!prev[updated._id]) return prev;
+      const next = { ...prev };
+      if (updated.stock === 0) delete next[updated._id];
+      else next[updated._id] = Math.min(next[updated._id], updated.stock);
+      return next;
+    });
+  }
+
+  async function handleDeleteProduct(p) {
+    if (!window.confirm(`¿Eliminar "${p.nombre}"?`)) return;
+    try {
+      await deleteProduct(p._id);
+      setProducts(prev => prev.filter(x => x._id !== p._id));
+      setCart(prev => {
+        const next = { ...prev };
+        delete next[p._id];
+        return next;
+      });
+    } catch (e) {
+      window.alert(e.message);
+    }
+  }
+
   return (
     <>
       <Header cartCount={count} onOpenCart={() => setOpenCart(true)} />
@@ -84,6 +112,8 @@ export default function App() {
           shownProducts={shown}
           onAddToCart={add}
           onOpenAddModal={() => setOpenAddModal(true)}
+          onEditProduct={setEditing}
+          onDeleteProduct={handleDeleteProduct}
         />
       </main>
       <Footer />
@@ -95,10 +125,17 @@ export default function App() {
         total={total}
         onAdjust={adjust}
       />
-      <AddProductModal
+      <ProductFormModal
         isOpen={openAddModal}
         onClose={() => setOpenAddModal(false)}
-        onProductCreated={handleCreateProduct}
+        onSubmit={handleCreateProduct}
+        categories={categories}
+      />
+      <ProductFormModal
+        isOpen={Boolean(editing)}
+        product={editing}
+        onClose={() => setEditing(null)}
+        onSubmit={handleUpdateProduct}
         categories={categories}
       />
     </>

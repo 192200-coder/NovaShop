@@ -11,7 +11,9 @@ export default function Catalog({
   error,
   shownProducts,
   onAddToCart,
-  onOpenAddModal
+  onOpenAddModal,
+  onEditProduct,
+  onDeleteProduct
 }) {
   return (
     <section className="catalog container" id="productos">
@@ -55,7 +57,7 @@ export default function Catalog({
       ) : shownProducts.length ? (
         <div className="product-grid">
           {shownProducts.map(p => (
-            <ProductCard key={p._id} producto={p} onAdd={onAddToCart} />
+            <ProductCard key={p._id} producto={p} onAdd={onAddToCart} onEdit={onEditProduct} onDelete={onDeleteProduct} />
           ))}
         </div>
       ) : (

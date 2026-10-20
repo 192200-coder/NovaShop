@@ -12,6 +12,27 @@ export async function getProducts(params = {}) {
   return res.json();
 }
 
+export async function updateProduct(id, productData) {
+  const res = await fetch(`${BASE}/productos/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(productData),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || 'No se pudo actualizar el producto.');
+  }
+  return res.json();
+}
+
+export async function deleteProduct(id) {
+  const res = await fetch(`${BASE}/productos/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || 'No se pudo eliminar el producto.');
+  }
+}
+
 export async function createProduct(productData) {
   const res = await fetch(`${BASE}/productos`, {
     method: 'POST',
@@ -21,7 +42,7 @@ export async function createProduct(productData) {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || 'No se pudo registrar el producto. Inténtalo de nuevo.');
+    throw new Error(errorData.error || errorData.message || 'No se pudo registrar el producto. Inténtalo de nuevo.');
   }
 
   return res.json();

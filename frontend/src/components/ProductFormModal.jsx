@@ -1,19 +1,37 @@
-// src/components/AddProductModal.jsx
-import { useState } from 'react';
-import { X, PlusCircle } from 'lucide-react';
+// src/components/ProductFormModal.jsx
+import { useEffect, useState } from 'react';
+import { X, PlusCircle, Save } from 'lucide-react';
 
-export default function AddProductModal({ isOpen, onClose, onProductCreated, categories }) {
-  const [formData, setFormData] = useState({
-    nombre: '',
-    descripcion: '',
-    precio: '',
-    categoria: '',
-    nuevaCategoria: '',
-    stock: '',
-    imagen: ''
-  });
+const EMPTY_FORM = {
+  nombre: '',
+  descripcion: '',
+  precio: '',
+  categoria: '',
+  nuevaCategoria: '',
+  stock: '',
+  imagen: ''
+};
+
+// Si recibe `product` funciona en modo edición; si no, en modo creación.
+export default function ProductFormModal({ isOpen, onClose, onSubmit, categories, product }) {
+  const isEdit = Boolean(product);
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setError('');
+    setFormData(product ? {
+      nombre: product.nombre,
+      descripcion: product.descripcion || '',
+      precio: String(product.precio),
+      categoria: product.categoria,
+      nuevaCategoria: '',
+      stock: String(product.stock),
+      imagen: product.imagen || ''
+    } : EMPTY_FORM);
+  }, [isOpen, product]);
 
   if (!isOpen) return null;
 
@@ -46,11 +64,10 @@ export default function AddProductModal({ isOpen, onClose, onProductCreated, cat
 
     try {
       setLoading(true);
-      await onProductCreated(newProduct);
-      setFormData({ nombre: '', descripcion: '', precio: '', categoria: '', nuevaCategoria: '', stock: '', imagen: '' });
+      await onSubmit(newProduct);
       onClose();
     } catch (err) {
-      setError(err.message || 'Error al agregar el producto.');
+      setError(err.message || 'Error al guardar el producto.');
     } finally {
       setLoading(false);
     }
@@ -63,8 +80,8 @@ export default function AddProductModal({ isOpen, onClose, onProductCreated, cat
       <aside className="cart-panel" onMouseDown={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
         <div className="cart-title">
           <div>
-            <h2>Agregar Nuevo Producto</h2>
-            <p>Registra un artículo en el catálogo</p>
+            <h2>{isEdit ? 'Editar Producto' : 'Agregar Nuevo Producto'}</h2>
+            <p>{isEdit ? 'Actualiza los datos del artículo' : 'Registra un artículo en el catálogo'}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X /></button>
         </div>
@@ -176,8 +193,8 @@ export default function AddProductModal({ isOpen, onClose, onProductCreated, cat
             className="checkout"
             style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
           >
-            <PlusCircle size={18} />
-            {loading ? 'Guardando...' : 'Guardar Producto'}
+            {isEdit ? <Save size={18} /> : <PlusCircle size={18} />}
+            {loading ? 'Guardando...' : isEdit ? 'Guardar Cambios' : 'Guardar Producto'}
           </button>
         </form>
       </aside>

@@ -34,4 +34,29 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 // Rutas de escritura son educativas; no se exponen sin autenticación en este proyecto público.
+const pick = body => Object.fromEntries(
+  ['nombre', 'descripcion', 'precio', 'categoria', 'stock', 'imagen']
+    .filter(k => body?.[k] !== undefined)
+    .map(k => [k, body[k]])
+);
+const handleWriteError = (e, res, next) => (e.name === 'ValidationError' || e.name === 'CastError')
+  ? res.status(400).json({ error: e.message })
+  : next(e);
+router.post('/', async (req, res, next) => {
+  try { res.status(201).json(await Product.create(pick(req.body))); } catch (e) { handleWriteError(e, res, next); }
+});
+router.put('/:id', async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID no válido' });
+    const item = await Product.findByIdAndUpdate(req.params.id, pick(req.body), { new: true, runValidators: true });
+    return item ? res.json(item) : res.status(404).json({ error: 'No encontrado' });
+  } catch (e) { handleWriteError(e, res, next); }
+});
+router.delete('/:id', async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID no válido' });
+    const item = await Product.findByIdAndDelete(req.params.id);
+    return item ? res.status(204).end() : res.status(404).json({ error: 'No encontrado' });
+  } catch (e) { next(e); }
+});
 export default router;

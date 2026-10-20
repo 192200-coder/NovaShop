@@ -1,3 +1,4 @@
+import './dns.js';
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import Product from './models/Product.js';
