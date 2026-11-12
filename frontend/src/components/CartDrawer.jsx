@@ -1,7 +1,7 @@
 import { ShoppingBag, ArrowRight, Minus, Plus, Trash2, X, Package } from 'lucide-react';
 import { money } from '../utils/format.js';
 
-export default function CartDrawer({ isOpen, onClose, items, count, total, onAdjust }) {
+export default function CartDrawer({ isOpen, onClose, items, count, total, onAdjust, onCheckout }) {
   if (!isOpen) return null;
 
   return (
@@ -56,13 +56,13 @@ export default function CartDrawer({ isOpen, onClose, items, count, total, onAdj
             <span>Subtotal</span>
             <b>{money(total)}</b>
           </div>
-          <p>Demostración académica: no incluye pago ni pedidos reales.</p>
+          <p>Pagos en modo de prueba (Mercado Pago, Stripe o PayPal): no se cobra dinero real.</p>
           <button
             disabled={!items.length}
             className="checkout"
-            onClick={() => alert('Este es un proyecto educativo: el proceso de compra no está implementado.')}
+            onClick={onCheckout}
           >
-            Continuar (demostración) <ArrowRight size={18} />
+            Continuar al pago <ArrowRight size={18} />
           </button>
         </div>
       </aside>

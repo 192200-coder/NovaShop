@@ -4,12 +4,23 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import productsRouter from "./routes/products.js";
+import authRouter from "./routes/auth.js";
+import paymentsRouter from "./routes/payments.js";
+import Order from "./models/Order.js";
+import { warnInvalidKeys } from "./payments/config.js";
 import https from "node:https";
 import fs from "node:fs";
 
 const app = express();
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:5173" }));
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN || "https://localhost:5173",
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "100kb" }));
+app.use("/api/auth", authRouter);
+app.use("/api/pagos", paymentsRouter);
 
 app.get("/api/lab/saludo", (req, res) => {
   res.json({ mensaje: "Hola desde NovaShop", metodo: req.method });
@@ -47,6 +58,10 @@ app.get("/api/salud", (_req, res) =>
 );
 app.use("/api/productos", productsRouter);
 app.use((err, _req, res, _next) => {
+  if (err.type === "entity.parse.failed")
+    return res.status(400).json({ error: "El cuerpo debe ser JSON válido." });
+  if (err.type === "entity.too.large")
+    return res.status(413).json({ error: "El contenido supera el tamaño permitido." });
   console.error(err);
   res.status(500).json({ error: "Error del servidor" });
 });
@@ -57,7 +72,9 @@ if (!uri) {
 }
 try {
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
+  await Order.init(); // crea los índices de la colección pedidos
   console.log("MongoDB conectado");
+  warnInvalidKeys();
   const tlsOptions = {
     key: fs.readFileSync(
       new URL("../certificados/localhost-key.pem", import.meta.url),

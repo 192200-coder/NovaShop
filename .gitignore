@@ -1,0 +1,4 @@
+# Material de referencia recibido (contiene archivos .env con credenciales)
+dataProsesaar/
+node_modules/
+.env

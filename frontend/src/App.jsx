@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Header from './components/Header.jsx';
 import Hero from './components/Hero.jsx';
 import Benefits from './components/Benefits.jsx';
@@ -6,7 +6,35 @@ import Catalog from './components/Catalog.jsx';
 import CartDrawer from './components/CartDrawer.jsx';
 import ProductFormModal from './components/ProductFormModal.jsx';
 import Footer from './components/Footer.jsx';
-import { getProducts, createProduct, updateProduct, deleteProduct } from './api.js';
+import LoginModal from './components/LoginModal.jsx';
+import CheckoutModal from './components/CheckoutModal.jsx';
+import OrdersModal from './components/OrdersModal.jsx';
+import { getProducts, createProduct, updateProduct, deleteProduct, getCurrentUser, logout, verifyPayment } from './api.js';
+import { PROVIDERS } from './utils/payments.js';
+
+// El carrito se guarda en el navegador para no perderlo al ir a la página de la pasarela.
+const CART_KEY = 'novashop_carrito';
+const readCart = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(CART_KEY) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+};
+
+// Lee y limpia los parámetros con los que la pasarela devuelve al comprador.
+function readCheckoutReturn() {
+  const url = new URL(window.location.href);
+  const proveedor = url.searchParams.get('checkout');
+  if (!proveedor) return null;
+  const value = {
+    proveedor,
+    pedido: url.searchParams.get('pedido'),
+    paymentId: url.searchParams.get('payment_id') || url.searchParams.get('collection_id'),
+    cancelado: url.searchParams.get('cancelado') === '1'
+  };
+  window.history.replaceState(null, '', url.pathname + url.hash);
+  return value;
+}
 
 export default function App() {
   const [products, setProducts] = useState([]);
@@ -14,10 +42,92 @@ export default function App() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
-  const [cart, setCart] = useState({});
+  const [cart, setCart] = useState(readCart);
   const [openCart, setOpenCart] = useState(false);
   const [openAddModal, setOpenAddModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [login, setLogin] = useState({ open: false, notice: '', next: null });
+  const [openCheckout, setOpenCheckout] = useState(false);
+  const [openOrders, setOpenOrders] = useState(false);
+  const [flash, setFlash] = useState(null);
+  const [checkoutReturn, setCheckoutReturn] = useState(readCheckoutReturn);
+
+  useEffect(() => {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { /* almacenamiento no disponible */ }
+  }, [cart]);
+
+  // Recupera la sesión guardada en la cookie del servidor.
+  useEffect(() => {
+    let active = true;
+    getCurrentUser()
+      .then(u => { if (active) setUser(u); })
+      .catch(() => {})
+      .finally(() => { if (active) setAuthLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const clearCart = useCallback(() => setCart({}), []);
+
+  // Al volver de la pasarela, el backend consulta el estado real del pago.
+  useEffect(() => {
+    if (!checkoutReturn || authLoading) return;
+    const nombre = PROVIDERS[checkoutReturn.proveedor]?.nombre || 'la pasarela';
+    if (!user) {
+      setLogin({ open: true, notice: `Inicia sesión para confirmar tu pago con ${nombre}.`, next: null });
+      return;
+    }
+    const current = checkoutReturn;
+    setCheckoutReturn(null);
+    if (!/^[a-f0-9]{24}$/i.test(current.pedido || '')) {
+      setFlash({ type: 'error', text: 'No se recibió el pedido al volver de la pasarela. Revisa Mis pedidos.' });
+      return;
+    }
+    if (current.cancelado) {
+      setFlash({ type: 'info', text: `Cancelaste el pago en ${nombre}. El pedido sigue pendiente en Mis pedidos.` });
+      return;
+    }
+    setFlash({ type: 'info', text: `Verificando tu pago con ${nombre}…` });
+    verifyPayment(current.pedido, current.paymentId)
+      .then(({ pedido }) => {
+        if (pedido.estado === 'pagado') {
+          clearCart();
+          setFlash({ type: 'success', text: `¡Pago confirmado por ${nombre}! Tu pedido ya aparece en Mis pedidos.` });
+        } else if (pedido.estado === 'rechazado') {
+          setFlash({ type: 'error', text: `${nombre} rechazó el pago. Tu carrito se conserva para intentarlo de nuevo.` });
+        } else {
+          setFlash({ type: 'info', text: 'El pago aún no está confirmado. Usa "Verificar pago" en Mis pedidos en unos minutos.' });
+        }
+      })
+      .catch(e => setFlash({ type: 'error', text: `${e.message} Revisa Mis pedidos antes de volver a pagar.` }));
+  }, [checkoutReturn, authLoading, user, clearCart]);
+
+  function requireLogin(next, notice) {
+    if (user) return true;
+    setLogin({ open: true, notice, next });
+    return false;
+  }
+
+  function handleLogin(u) {
+    setUser(u);
+    const next = login.next;
+    setLogin({ open: false, notice: '', next: null });
+    if (next === 'checkout') setOpenCheckout(true);
+    if (next === 'orders') setOpenOrders(true);
+  }
+
+  async function handleLogout() {
+    try { await logout(); } catch { /* la cookie se limpia igualmente al expirar */ }
+    setUser(null);
+    setOpenOrders(false);
+    setOpenCheckout(false);
+  }
+
+  function goToCheckout() {
+    setOpenCart(false);
+    if (requireLogin('checkout', 'Inicia sesión para continuar con el pago. Tu carrito se conserva.')) setOpenCheckout(true);
+  }
 
   useEffect(() => {
     let active = true;
@@ -97,7 +207,23 @@ export default function App() {
 
   return (
     <>
-      <Header cartCount={count} onOpenCart={() => setOpenCart(true)} />
+      <Header
+        cartCount={count}
+        onOpenCart={() => setOpenCart(true)}
+        user={user}
+        authLoading={authLoading}
+        onLogin={() => setLogin({ open: true, notice: '', next: null })}
+        onLogout={handleLogout}
+        onOrders={() => setOpenOrders(true)}
+      />
+      {flash && (
+        <div className={`flash ${flash.type}`} role="status">
+          <div className="container">
+            <span>{flash.text}</span>
+            <button onClick={() => setFlash(null)} aria-label="Cerrar aviso">×</button>
+          </div>
+        </div>
+      )}
       <main id="inicio">
         <Hero />
         <Benefits />
@@ -124,6 +250,24 @@ export default function App() {
         count={count}
         total={total}
         onAdjust={adjust}
+        onCheckout={goToCheckout}
+      />
+      <LoginModal
+        isOpen={login.open}
+        notice={login.notice}
+        onClose={() => setLogin({ open: false, notice: '', next: null })}
+        onLogin={handleLogin}
+      />
+      <CheckoutModal
+        isOpen={openCheckout && Boolean(user)}
+        items={items}
+        onClose={() => setOpenCheckout(false)}
+        onPaid={clearCart}
+        onShowOrders={() => { setOpenCheckout(false); setOpenOrders(true); }}
+      />
+      <OrdersModal
+        isOpen={openOrders && Boolean(user)}
+        onClose={() => setOpenOrders(false)}
       />
       <ProductFormModal
         isOpen={openAddModal}
