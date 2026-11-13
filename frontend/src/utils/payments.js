@@ -30,6 +30,27 @@ export function safeCheckoutUrl(proveedor, value) {
   return null;
 }
 
+// Pedido que se está pagando en la pasarela. Permite confirmarlo al volver a la tienda
+// aunque la pasarela no devuelva parámetros (o el comprador recargue la página).
+const PENDING_KEY = 'novashop_pago_en_curso';
+
+export function savePendingCheckout(pedido, proveedor) {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify({ pedido, proveedor })); } catch { /* sin almacenamiento */ }
+}
+
+export function readPendingCheckout() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+    return value && /^[a-f0-9]{24}$/i.test(value.pedido || '') && PROVIDERS[value.proveedor] ? value : null;
+  } catch { return null; }
+}
+
+export function clearPendingCheckout(pedido) {
+  try {
+    if (!pedido || readPendingCheckout()?.pedido === pedido) localStorage.removeItem(PENDING_KEY);
+  } catch { /* sin almacenamiento */ }
+}
+
 export const usd = centavos => `US$ ${(centavos / 100).toFixed(2)}`;
 export const soles = centimos => `S/ ${(centimos / 100).toFixed(2)}`;
 

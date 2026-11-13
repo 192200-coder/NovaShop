@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import Hero from './components/Hero.jsx';
 import Benefits from './components/Benefits.jsx';
@@ -10,7 +10,7 @@ import LoginModal from './components/LoginModal.jsx';
 import CheckoutModal from './components/CheckoutModal.jsx';
 import OrdersModal from './components/OrdersModal.jsx';
 import { getProducts, createProduct, updateProduct, deleteProduct, getCurrentUser, logout, verifyPayment } from './api.js';
-import { PROVIDERS } from './utils/payments.js';
+import { PROVIDERS, clearPendingCheckout, readPendingCheckout } from './utils/payments.js';
 
 // El carrito se guarda en el navegador para no perderlo al ir a la página de la pasarela.
 const CART_KEY = 'novashop_carrito';
@@ -21,20 +21,21 @@ const readCart = () => {
   } catch { return {}; }
 };
 
-// Lee y limpia los parámetros con los que la pasarela devuelve al comprador.
-function readCheckoutReturn() {
-  const url = new URL(window.location.href);
+// Lee (sin modificar nada) los parámetros con los que la pasarela devuelve al comprador.
+// Se lee una sola vez al cargar el módulo: React en modo estricto ejecuta dos veces
+// los inicializadores de estado, y antes la segunda lectura encontraba la URL ya limpia.
+function parseCheckoutReturn(href) {
+  const url = new URL(href);
   const proveedor = url.searchParams.get('checkout');
   if (!proveedor) return null;
-  const value = {
+  return {
     proveedor,
     pedido: url.searchParams.get('pedido'),
     paymentId: url.searchParams.get('payment_id') || url.searchParams.get('collection_id'),
     cancelado: url.searchParams.get('cancelado') === '1'
   };
-  window.history.replaceState(null, '', url.pathname + url.hash);
-  return value;
 }
+const initialReturn = parseCheckoutReturn(window.location.href);
 
 export default function App() {
   const [products, setProducts] = useState([]);
@@ -52,7 +53,14 @@ export default function App() {
   const [openCheckout, setOpenCheckout] = useState(false);
   const [openOrders, setOpenOrders] = useState(false);
   const [flash, setFlash] = useState(null);
-  const [checkoutReturn, setCheckoutReturn] = useState(readCheckoutReturn);
+  // Retorno desde la URL o, si no hay, el pedido que quedó "en curso" antes de ir a la pasarela.
+  const [checkoutReturn, setCheckoutReturn] = useState(() => initialReturn ?? (readPendingCheckout() && { ...readPendingCheckout(), silencioso: true }));
+  const handledReturn = useRef(false);
+
+  // Limpia los parámetros de la URL después de leerlos.
+  useEffect(() => {
+    if (initialReturn) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { /* almacenamiento no disponible */ }
@@ -78,6 +86,8 @@ export default function App() {
       setLogin({ open: true, notice: `Inicia sesión para confirmar tu pago con ${nombre}.`, next: null });
       return;
     }
+    if (handledReturn.current) return; // evita verificar dos veces (modo estricto de React)
+    handledReturn.current = true;
     const current = checkoutReturn;
     setCheckoutReturn(null);
     if (!/^[a-f0-9]{24}$/i.test(current.pedido || '')) {
@@ -88,19 +98,24 @@ export default function App() {
       setFlash({ type: 'info', text: `Cancelaste el pago en ${nombre}. El pedido sigue pendiente en Mis pedidos.` });
       return;
     }
-    setFlash({ type: 'info', text: `Verificando tu pago con ${nombre}…` });
+    if (!current.silencioso) setFlash({ type: 'info', text: `Verificando tu pago con ${nombre}…` });
     verifyPayment(current.pedido, current.paymentId)
       .then(({ pedido }) => {
+        if (pedido.estado === 'pagado' || pedido.estado === 'rechazado') clearPendingCheckout(pedido._id);
         if (pedido.estado === 'pagado') {
           clearCart();
           setFlash({ type: 'success', text: `¡Pago confirmado por ${nombre}! Tu pedido ya aparece en Mis pedidos.` });
         } else if (pedido.estado === 'rechazado') {
           setFlash({ type: 'error', text: `${nombre} rechazó el pago. Tu carrito se conserva para intentarlo de nuevo.` });
-        } else {
+        } else if (!current.silencioso) {
           setFlash({ type: 'info', text: 'El pago aún no está confirmado. Usa "Verificar pago" en Mis pedidos en unos minutos.' });
         }
       })
-      .catch(e => setFlash({ type: 'error', text: `${e.message} Revisa Mis pedidos antes de volver a pagar.` }));
+      .catch(e => {
+        // Pedido de otra cuenta o sin checkout: se olvida para no reintentarlo en cada carga.
+        if ([404, 409].includes(e.status)) clearPendingCheckout(current.pedido);
+        if (!current.silencioso) setFlash({ type: 'error', text: `${e.message} Revisa Mis pedidos antes de volver a pagar.` });
+      });
   }, [checkoutReturn, authLoading, user, clearCart]);
 
   function requireLogin(next, notice) {
@@ -268,6 +283,12 @@ export default function App() {
       <OrdersModal
         isOpen={openOrders && Boolean(user)}
         onClose={() => setOpenOrders(false)}
+        onSettled={pedido => {
+          // Solo se vacía el carrito si el pedido verificado es el que estaba en curso.
+          if (readPendingCheckout()?.pedido !== pedido._id) return;
+          clearPendingCheckout(pedido._id);
+          if (pedido.estado === 'pagado') clearCart();
+        }}
       />
       <ProductFormModal
         isOpen={openAddModal}

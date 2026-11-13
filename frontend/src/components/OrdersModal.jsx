@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { X, RefreshCw, ExternalLink, SearchCheck } from 'lucide-react';
 import { getOrders, verifyPayment } from '../api.js';
-import { PROVIDERS, STATES, safeCheckoutUrl, soles, usd } from '../utils/payments.js';
+import { PROVIDERS, STATES, safeCheckoutUrl, savePendingCheckout, soles, usd } from '../utils/payments.js';
 
 const CAN_VERIFY = ['pendiente', 'procesando', 'revision'];
 
-export default function OrdersModal({ isOpen, onClose, onPaid }) {
+export default function OrdersModal({ isOpen, onClose, onSettled }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,7 +31,7 @@ export default function OrdersModal({ isOpen, onClose, onPaid }) {
     try {
       const { pedido, sinPago } = await verifyPayment(order._id);
       setOrders(prev => prev.map(o => (o._id === pedido._id ? pedido : o)));
-      if (pedido.estado === 'pagado') onPaid?.();
+      if (pedido.estado === 'pagado' || pedido.estado === 'rechazado') onSettled?.(pedido);
       setFeedback(prev => ({ ...prev, [order._id]: sinPago ? 'La pasarela todavía no registra un pago para este pedido.' : '' }));
     } catch (e) {
       setFeedback(prev => ({ ...prev, [order._id]: e.message }));
@@ -74,7 +74,7 @@ export default function OrdersModal({ isOpen, onClose, onPaid }) {
                 {feedback[order._id] && <p className="inline-note">{feedback[order._id]}</p>}
                 {(resume || (CAN_VERIFY.includes(order.estado) && order.referenciaExterna)) && (
                   <div className="panel-actions">
-                    {resume && <a className="ghost-btn" href={resume}><ExternalLink size={15} /> Continuar pago</a>}
+                    {resume && <a className="ghost-btn" href={resume} onClick={() => savePendingCheckout(order._id, order.proveedor)}><ExternalLink size={15} /> Continuar pago</a>}
                     {order.referenciaExterna && CAN_VERIFY.includes(order.estado) && (
                       <button className="ghost-btn" disabled={checking === order._id} onClick={() => verify(order)}>
                         <SearchCheck size={15} /> {checking === order._id ? 'Verificando…' : 'Verificar pago'}

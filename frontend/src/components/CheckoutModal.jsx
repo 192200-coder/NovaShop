@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, ArrowRight, ShieldCheck } from 'lucide-react';
 import { createOrder, getPaymentConfig, simulatePayment, startCheckout } from '../api.js';
-import { PROVIDERS, STATES, estimateUsd, safeCheckoutUrl, soles, usd } from '../utils/payments.js';
+import { PROVIDERS, STATES, estimateUsd, safeCheckoutUrl, savePendingCheckout, soles, usd } from '../utils/payments.js';
 
 const ORDER = ['mercadopago', 'stripe', 'paypal', 'mock'];
 
@@ -54,6 +54,7 @@ export default function CheckoutModal({ isOpen, items, onClose, onPaid, onShowOr
       setOrder(pedido);
       const url = safeCheckoutUrl(provider, checkoutUrl);
       if (!url) throw new Error('La URL de pago recibida no pertenece a la pasarela elegida.');
+      savePendingCheckout(current._id, provider);
       window.location.assign(url); // el comprador paga en la página de la pasarela
     } catch (e) {
       setError(current ? `${e.message} El pedido quedó guardado en Mis pedidos.` : e.message);
