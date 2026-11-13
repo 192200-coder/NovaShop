@@ -40,9 +40,23 @@ Stripe y PayPal sandbox cobran en dólares con `TIPO_CAMBIO_PEN_USD` (3.75 por d
 3. En **Cuentas de prueba**, ubica (o crea, país Perú) un **comprador de prueba**. Para pagar, abre el checkout en una ventana de incógnito e inicia sesión con ese comprador, **no** con tu cuenta real.
 4. Usa las [tarjetas de prueba](https://www.mercadopago.com.pe/developers/es/docs/checkout-pro/integration-test/test-cards). En el nombre del titular escribe `APRO` (aprobado), `OTHE` (rechazado) o `CONT` (pendiente).
 
-Mercado Pago no redirige automáticamente a `localhost`: al terminar pulsa **Volver al sitio**, o entra a **Mis pedidos → Verificar pago**. Si publicas el frontend con una URL HTTPS (por ejemplo, un túnel), ponla en `MP_BACK_URL_BASE` para activar el regreso automático.
+Mercado Pago no redirige automáticamente a `localhost`: al terminar pulsa **Volver al sitio**, o entra a **Mis pedidos → Verificar pago**. Para tener el regreso automático y los webhooks, usa ngrok.
 
-**Webhooks (opcional):** necesitan una URL pública HTTPS. Configura `MP_WEBHOOK_URL=https://tu-dominio/api/pagos/webhook` y `MP_WEBHOOK_SECRET` con la *clave secreta* que muestra la sección Webhooks del panel (no es el Access Token).
+### Regreso automático y webhooks con ngrok (opcional)
+
+Un solo túnel al **frontend** basta, porque Vite reenvía `/api` al backend.
+
+1. Crea una cuenta en [ngrok](https://dashboard.ngrok.com), instala el agente y ejecuta `ngrok config add-authtoken TU_TOKEN`. En *Domains* reclama tu **dominio estático gratuito**, así la URL no cambia cada vez.
+2. Con backend y frontend encendidos, en una tercera terminal: `ngrok http https://localhost:5173 --url=https://tu-dominio.ngrok-free.app`
+3. En `backend/.env`:
+   ```dotenv
+   MP_BACK_URL_BASE=https://tu-dominio.ngrok-free.app
+   MP_WEBHOOK_URL=https://tu-dominio.ngrok-free.app/api/pagos/webhook
+   ```
+4. En Mercado Pago, entra a **Tus integraciones → tu aplicación → Webhooks → Configurar notificaciones**. En *Modo de prueba* pega la misma `MP_WEBHOOK_URL`, marca el evento **Pagos** y guarda. Copia la **clave secreta** que aparece en `MP_WEBHOOK_SECRET`. Esta clave no la da ngrok y **no es** el Access Token.
+5. Reinicia el backend y **abre la tienda desde `https://tu-dominio.ngrok-free.app`**. La primera vez, ngrok muestra un aviso: pulsa *Visit Site*. Inicia sesión ahí, porque la sesión de `localhost` no se comparte con otro dominio.
+
+Con esto, Mercado Pago vuelve solo a la tienda al aprobar el pago, y Stripe y PayPal también regresan al dominio de ngrok. Con la herramienta *Simular notificación* del panel puedes comprobar que el webhook responde 200. Sin ngrok, todo sigue funcionando con **Verificar pago**.
 
 ### Stripe y PayPal
 
@@ -76,7 +90,7 @@ Productos: `GET /api/productos` (filtros `buscar`, `categoria`, `min`, `max`), `
 
 ## Pruebas
 
-En `backend`: `npm test` (27 pruebas con pasarelas y base de datos simuladas; no hacen cobros ni llamadas externas). En `frontend`: `npm run build`.
+En `backend`: `npm test` (29 pruebas con pasarelas y base de datos simuladas; no hacen cobros ni llamadas externas). En `frontend`: `npm run build`.
 
 ## Consultas de ejemplo en mongosh
 

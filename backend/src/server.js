@@ -7,14 +7,14 @@ import productsRouter from "./routes/products.js";
 import authRouter from "./routes/auth.js";
 import paymentsRouter from "./routes/payments.js";
 import Order from "./models/Order.js";
-import { warnInvalidKeys } from "./payments/config.js";
+import { allowedOrigins, warnInvalidKeys } from "./payments/config.js";
 import https from "node:https";
 import fs from "node:fs";
 
 const app = express();
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || "https://localhost:5173",
+    origin: allowedOrigins(),
     credentials: true,
   }),
 );

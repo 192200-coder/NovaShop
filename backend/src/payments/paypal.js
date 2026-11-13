@@ -37,6 +37,7 @@ async function paypal(path, { method = 'GET', body, requestId } = {}, { env = pr
 
 export async function createCheckout(order, deps = {}) {
   const env = deps.env || process.env;
+  const base = deps.origin || undefined;
   const result = await paypal('/v2/checkout/orders', {
     method: 'POST',
     requestId: `novashop-pedido-${order._id}`,
@@ -54,8 +55,8 @@ export async function createCheckout(order, deps = {}) {
             brand_name: 'NovaShop',
             user_action: 'PAY_NOW',
             shipping_preference: 'NO_SHIPPING',
-            return_url: returnUrl(order, 'paypal', { env }),
-            cancel_url: returnUrl(order, 'paypal', { env, extra: { cancelado: '1' } })
+            return_url: returnUrl(order, 'paypal', { env, base }),
+            cancel_url: returnUrl(order, 'paypal', { env, base, extra: { cancelado: '1' } })
           }
         }
       }

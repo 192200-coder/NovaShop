@@ -168,6 +168,12 @@ test('webhook: exige firma y consulta el pago', () => fixture(async ({ call, ord
   assert.equal(orders.docs.find(d => d._id === order._id).estado, 'pagado');
 }));
 
+test('webhook: ignora avisos IPN y pagos inexistentes de la simulación', () => fixture(async ({ call }) => {
+  assert.equal((await call('/webhook?topic=merchant_order&id=1', { user: null, body: {} })).status, 200);
+  const sim = await call('/webhook?data.id=123&type=payment', { user: null, body: {}, headers: { 'x-signature': 'valida', 'x-request-id': 'r' } });
+  assert.equal(sim.status, 200);
+}, { gateways: { getPayment: async () => { const e = new Error('no existe'); e.status = 404; throw e; } } }));
+
 test('webhook sin clave configurada responde 503', () => fixture(async ({ call }) => {
   assert.equal((await call('/webhook?data.id=1', { user: null, body: {} })).status, 503);
 }, { webhookSecret: '' }));

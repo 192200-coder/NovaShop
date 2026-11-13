@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import { requireUser, sameOrigin } from './auth.js';
-import { NOMBRES, paymentConfig } from '../payments/config.js';
+import { NOMBRES, originFor, paymentConfig } from '../payments/config.js';
 import { PaymentError, calculateOrder, chargeAmount, simulateCharge } from '../payments/order.js';
 import * as mercadopago from '../payments/mercadopago.js';
 import * as stripe from '../payments/stripe.js';
@@ -35,6 +35,9 @@ export function createPaymentsRouter({
     try {
       const secret = webhookSecret();
       if (!secret) return res.status(503).json({ error: 'La notificación de pagos no está configurada.' });
+      // Avisos en formato antiguo (IPN, ?topic=...) o de otros eventos: se confirman sin procesarlos.
+      const type = req.query.type || req.body?.type;
+      if (req.query.topic || (type && type !== 'payment')) return res.json({ recibido: true, ignorado: true });
       const dataId = req.query['data.id'] || req.body?.data?.id;
       if (!/^\d+$/.test(String(dataId || '')) || !gateways.mercadopago.verifyWebhookSignature({
         dataId, requestId: req.get('x-request-id'), signature: req.get('x-signature'), secret
@@ -42,7 +45,13 @@ export function createPaymentsRouter({
         return res.status(401).json({ error: 'Firma de notificación no válida.' });
       }
       // No se confía en el contenido del aviso: se consulta el pago directamente a Mercado Pago.
-      const payment = await gateways.mercadopago.getPayment(String(dataId));
+      let payment;
+      try { payment = await gateways.mercadopago.getPayment(String(dataId)); }
+      catch (error) {
+        // La simulación del panel usa IDs que no existen: se responde 200 para que no se reintente.
+        if (error.status === 404) return res.json({ recibido: true });
+        throw error;
+      }
       const reference = payment?.external_reference;
       if (String(payment?.id) !== String(dataId) || !mongoose.isValidObjectId(reference)) return res.json({ recibido: true });
       const order = await orders.findOne({ _id: reference, proveedor: 'mercadopago' });
@@ -125,7 +134,7 @@ export function createPaymentsRouter({
 
       let checkout;
       try {
-        checkout = await gateway.createCheckout(claimed);
+        checkout = await gateway.createCheckout(claimed, { origin: originFor(req) });
         if (typeof checkout?.referencia !== 'string' || typeof checkout?.checkoutUrl !== 'string') throw new Error('Respuesta incompleta.');
       } catch (error) {
         // Crear un checkout no cobra nada, así que el pedido vuelve a "pendiente" y se puede reintentar.

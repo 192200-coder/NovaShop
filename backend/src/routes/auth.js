@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
 import { hashPassword, verifyPassword, tokenHash } from '../auth.js';
+import { allowedOrigins } from '../payments/config.js';
 
 const router = Router();
 const cookieName = 'novashop_session';
@@ -17,8 +18,7 @@ function readToken(req) {
 }
 export function sameOrigin(req, res, next) {
   const origin = req.get('origin');
-  const allowed = process.env.CLIENT_ORIGIN || 'https://localhost:5173';
-  if (origin && origin !== allowed) return res.status(403).json({ error: 'Origen no permitido.' });
+  if (origin && !allowedOrigins().includes(origin)) return res.status(403).json({ error: 'Origen no permitido.' });
   next();
 }
 export async function requireUser(req, res, next) {

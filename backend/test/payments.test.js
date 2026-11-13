@@ -82,6 +82,21 @@ test('Mercado Pago: crea la preferencia con external_reference y back_urls', asy
   assert.equal(body.auto_return, undefined, 'localhost no admite regreso automático');
 });
 
+test('ngrok: se acepta como origen y Mercado Pago activa el regreso automático', async () => {
+  const { allowedOrigins, originFor } = await import('../src/payments/config.js');
+  const env = { CLIENT_ORIGIN: 'https://localhost:5173', MP_BACK_URL_BASE: 'https://demo.ngrok-free.app/', MP_ACCESS_TOKEN: 'TEST-abc' };
+  assert.deepEqual(allowedOrigins(env), ['https://localhost:5173', 'https://demo.ngrok-free.app']);
+  assert.equal(originFor({ get: () => 'https://evil.example' }, env), 'https://localhost:5173');
+  const { fetcher, calls } = fakeFetch({ '/checkout/preferences': { id: 'p', sandbox_init_point: 'https://sandbox.mercadopago.com.pe/x' } });
+  await mercadopago.createCheckout(baseOrder(), { env, fetcher, origin: 'https://localhost:5173' });
+  const body = JSON.parse(calls[0].options.body);
+  assert.match(body.back_urls.success, /^https:\/\/demo\.ngrok-free\.app\/\?checkout=mercadopago/);
+  assert.equal(body.auto_return, 'approved');
+  const stripeFetch = fakeFetch({ '/checkout/sessions': { id: 'cs', url: 'https://checkout.stripe.com/c/x' } });
+  await stripe.createCheckout(baseOrder({ cobro: { centavos: 2000, tipoCambio: 3.75 } }), { env: { STRIPE_SECRET_KEY: 'sk_test_x' }, fetcher: stripeFetch.fetcher, origin: 'https://demo.ngrok-free.app' });
+  assert.match(new URLSearchParams(stripeFetch.calls[0].options.body.toString()).get('success_url'), /^https:\/\/demo\.ngrok-free\.app\//);
+});
+
 test('Mercado Pago: si rechaza las URLs locales, reintenta sin back_urls', async () => {
   const { fetcher, calls } = fakeFetch({
     '/checkout/preferences': (_url, options) => JSON.parse(options.body).back_urls

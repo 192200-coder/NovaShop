@@ -33,8 +33,22 @@ export function clientOrigin(env = process.env) {
   return (env.CLIENT_ORIGIN || 'https://localhost:5173').replace(/\/$/, '');
 }
 
-export function returnUrl(order, proveedor, { env = process.env, base = clientOrigin(env), extra = {} } = {}) {
-  const url = new URL('/', base);
+// Orígenes desde los que se puede usar la tienda: CLIENT_ORIGIN y, si existe, el dominio
+// público de ngrok (MP_BACK_URL_BASE).
+export function allowedOrigins(env = process.env) {
+  const origins = [clientOrigin(env)];
+  if (isHttps(env.MP_BACK_URL_BASE)) origins.push(new URL(env.MP_BACK_URL_BASE).origin);
+  return [...new Set(origins)];
+}
+
+// El comprador vuelve al mismo dominio desde el que pagó (localhost o ngrok).
+export function originFor(req, env = process.env) {
+  const origin = req?.get?.('origin');
+  return allowedOrigins(env).includes(origin) ? origin : clientOrigin(env);
+}
+
+export function returnUrl(order, proveedor, { env = process.env, base, extra = {} } = {}) {
+  const url = new URL('/', base || clientOrigin(env));
   url.searchParams.set('checkout', proveedor);
   url.searchParams.set('pedido', String(order._id));
   for (const [key, value] of Object.entries(extra)) url.searchParams.set(key, value);

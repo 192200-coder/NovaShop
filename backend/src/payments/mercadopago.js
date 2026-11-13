@@ -18,11 +18,12 @@ async function ensureTestSeller(env, fetcher) {
   return true;
 }
 
-export async function createCheckout(order, { env = process.env, fetcher = fetch } = {}) {
+export async function createCheckout(order, { env = process.env, fetcher = fetch, origin } = {}) {
   const accountCredentials = await ensureTestSeller(env, fetcher);
-  // Mercado Pago no puede redirigir automáticamente a localhost; con una URL pública (MP_BACK_URL_BASE)
-  // se activa el regreso automático. En local, el comprador usa "Volver al sitio" o "Verificar pago".
-  const base = /^https:\/\//.test(env.MP_BACK_URL_BASE || '') ? env.MP_BACK_URL_BASE.replace(/\/$/, '') : undefined;
+  // Mercado Pago no puede redirigir automáticamente a localhost; con una URL pública (ngrok en
+  // MP_BACK_URL_BASE) se activa el regreso automático. En local se usa "Volver al sitio" o "Verificar pago".
+  const publicBase = /^https:\/\//.test(env.MP_BACK_URL_BASE || '') ? env.MP_BACK_URL_BASE.replace(/\/$/, '') : undefined;
+  const base = origin && !isLocalUrl(origin) ? origin : publicBase;
   const back = returnUrl(order, 'mercadopago', { env, ...(base ? { base } : {}) });
   const body = {
     items: order.items.map(item => ({
