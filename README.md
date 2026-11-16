@@ -102,3 +102,7 @@ db.productos.aggregate([{$group:{_id:'$categoria',cantidad:{$sum:1}}}])
 ```
 
 **Límites de la demo:** solo modo de prueba; el stock se valida pero no se descuenta; no hay envío, impuestos, reembolsos ni roles de administrador (las rutas de escritura de productos siguen siendo públicas).
+
+## Bitácora y pendientes
+
+Errores encontrados durante las pruebas, sus soluciones y el plan para la próxima sesión: [docs/BITACORA_Y_PLAN.md](docs/BITACORA_Y_PLAN.md).
